@@ -12,11 +12,15 @@ class RainbowUK(app.App):
         self.leds = neopixel.NeoPixel(config.pin[3], 78)
         self.brightness = 0.1
         self.pattern = RainbowPattern()
-        self.button_a = config.pin[1].init(pull=Pin.PULL_UP)
-        self.button_b = config.pin[0].init(pull=Pin.PULL_UP)
+
+        self.button_a = config.pin[1]
+        self.button_a.init(pull=Pin.PULL_UP)
         self.button_a.irq(self.dimmer)
+
+        self.button_b = config.pin[0]
+        self.button_b.init(pull=Pin.PULL_UP)
         self.button_b.irq(self.brighter)
-    
+
     def dimmer(self):
         self.brightness -= 0.05
         if self.brightness <= 0:
