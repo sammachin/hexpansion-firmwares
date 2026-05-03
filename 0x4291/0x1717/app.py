@@ -6,9 +6,9 @@ from tildagonos import tildagonos
 
 
 def average_proportion(a, b, ratio):
-    r = (a[0] * ratio + b[0]) / (ratio + 1)
-    g = (a[1] * ratio + b[1]) / (ratio + 1)
-    b = (a[2] * ratio + b[2]) / (ratio + 1)
+    r = int((a[0] * ratio + b[0]) / (ratio + 1))
+    g = int((a[1] * ratio + b[1]) / (ratio + 1))
+    b = int((a[2] * ratio + b[2]) / (ratio + 1))
     return (r,g,b)
 
 class InfraRed(app.App):
