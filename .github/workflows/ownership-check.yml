@@ -5,6 +5,8 @@ on:
     types: [opened, synchronize, reopened]
   pull_request_review:
     types: [submitted, edited]
+  issue_comment:
+    types: [created]
 
 
 permissions:
@@ -14,26 +16,36 @@ permissions:
 jobs:
   check-ownership:
     runs-on: ubuntu-latest
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     steps:
       - uses: actions/checkout@v4
 
       - name: Check each modified file against CODEOWNERS
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
+          PR_AUTHOR=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.user.login')
           approvers=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate \
             --jq '[.[] | select(.state == "APPROVED") | .user.login] | unique | .[]')
-          users=($PR_AUTHOR $approvers)
+          comment_approvals=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+            --jq '[.[] | select(.body | test("^/approve$"; "m")) | .user.login] | unique | .[]')
+          users=($PR_AUTHOR $approvers $comment_approvals)
 
           failed=0
+          all_owners=()
           while IFS= read -r file; do
-            if ! python3 find_owner.py "$file" "${users[@]}"; then
+            if ! output=$(python3 find_owner.py "$file" "${users[@]}"); then
               echo "FAIL: none of [${users[*]}] is an owner of $file"
               failed=1
+              all_owners+=($(echo "$output" | tail -1))
             fi
           done < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          if [ $failed -eq 1 ]; then
+            unique_owners=$(echo "${all_owners[@]}" | tr ' ' '\n' | grep . | sed 's/^@*//' | sort -u | sed 's/^/@/' | tr '\n' ' ' | sed 's/ $//')
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --create-if-none --edit-last \
+              --body "This must be approved by an owner of this hexpansion before it can be merged. Those are ${unique_owners}. To approve this, comment \`/approve\`"
+          fi
           exit $failed
 
       - name: Auto Merge
