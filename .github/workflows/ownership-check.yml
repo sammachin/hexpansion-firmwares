@@ -12,6 +12,7 @@ on:
 permissions:
   pull-requests: write
   contents: write
+  checks: write
 
 jobs:
   check-ownership:
@@ -45,10 +46,18 @@ jobs:
               all_owners+=($(echo "$output" | tail -1))
             fi
           done < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          HEAD_SHA=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.head.sha')
           if [ $failed -eq 1 ]; then
             unique_owners=$(echo "${all_owners[@]}" | tr ' ' '\n' | grep . | sed 's/^@*//' | sort -u | sed 's/^/@/' | tr '\n' ' ' | sed 's/ $//')
             gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --create-if-none --edit-last \
               --body "This must be approved by an owner of this hexpansion before it can be merged. Those are ${unique_owners}. To approve this, comment \`/approve\`"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/check-runs" \
+              -X POST \
+              -f name="check-ownership" \
+              -f head_sha="$HEAD_SHA" \
+              -f status="completed" \
+              -f conclusion="success"
           fi
           exit $failed
 
